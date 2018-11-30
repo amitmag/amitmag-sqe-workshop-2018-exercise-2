@@ -22,7 +22,7 @@ let typeToHandlerMapping = {
 };
 
 export function functionDeclarationHandler(element){
-    let itemsToReturn = [];
+    let stringToReturn = '';
     let item = {
         line: element.loc.start.line,
         type: 'function declaration',
@@ -30,6 +30,7 @@ export function functionDeclarationHandler(element){
         condition: '',
         value: ''
     };
+    stringToReturn += 'function ' + element.id.name + '('
     
     itemsToReturn.push(item);
     element.params.forEach(variable => {
