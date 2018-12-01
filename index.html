@@ -9,8 +9,8 @@
                 height: 100%;
             }
             .textAreaWrapper {
-                width: 100%;
-                height: 80vh;
+                width: 500px;
+                height: 70vh;
             }
             textarea {
                 width: 80%;
@@ -25,11 +25,56 @@
                 background-color: green;
             }
 
+            .flex-container{
+                display: flex;
+            }
+
         </style>
     </head>
     <body>
         <table class='codeArea'>
             <tr>
+                <td>Enter function arguments:</td>
+            </tr>
+            <tr>
+                <table id="argsTable">
+                    <tr class='arg'>
+                        <td>
+                            <label>name: <input id="name" type="text"></label>
+                        </td>
+                        <td>
+                            <label>value: <input id="value" type="text"></label>
+                        </td>
+                    </tr>
+                </table>
+            </tr>
+            <tr>
+                <button id="moreArgs">Add another argument</button>
+            </tr>
+        </table>
+        <br><br>
+        <div class="flex-container">
+            <div>
+                <div>
+                    <label>Enter code here</label>
+                    <div class="textAreaWrapper">
+                            <textarea id="codePlaceholder" title="Enter code here"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div>
+                    <label>Parsed code here</label>
+                    <div class="textAreaWrapper">
+                        <div id="transformedCode"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <button id="codeSubmissionButton">Parse code</button>
+        </div>
+            <!-- <tr>
                 <td>
                     <div>
                         <label>Enter code here</label>
@@ -49,7 +94,7 @@
                 </td>
                 <td>
                     <div class="textAreaWrapper">
-                            <table id="itemsTable"></table>
+                            <div id="transformedCode"></div>
                     </div>
                 </td> 
             </tr>
@@ -62,7 +107,7 @@
                 <td>
                 </td>
             </tr>
-        </table>
+        </table> -->
 
         <script src="dist/bundle.js"></script>
     </body>
