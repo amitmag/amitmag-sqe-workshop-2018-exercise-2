@@ -11,12 +11,16 @@ $(document).ready(function () {
         $('tr.arg').each(function() {
             let argName = $(this).find('#name').val();
             let argValue = $(this).find('#value').val();
+            if(argValue.charAt(0) == '['){
+                let array = argValue.substring(1, argValue.length - 1).replace(/ /g,'').split(',');
+                argValue = array;
+            }
             symbolTable[argName] = [];
-            symbolTable[argName].push({'line':0, 'conditions': [], 'value': argValue});
+            symbolTable[argName].push({'line':0, 'value': argValue});
         });
         let codeToParse = $('#codePlaceholder').val();
-        let codeLinesAndColors = applySymbolicSubstitution(codeToParse, symbolTable);
-        createTable(codeLinesAndColors[0], codeLinesAndColors[1]);
+        let functionString = applySymbolicSubstitution(codeToParse, symbolTable);
+        $('#transformedCode').html(functionString);
     });
 });
 
