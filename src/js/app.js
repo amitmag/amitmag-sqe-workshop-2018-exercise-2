@@ -7,44 +7,27 @@ $(document).ready(function () {
     });
 
     $('#codeSubmissionButton').click(() => {
-        let symbolTable = {};
-        $('tr.arg').each(function() {
-            let argName = $(this).find('#name').val();
-            let argValue = $(this).find('#value').val();
-            if(argValue.charAt(0) == '['){
-                let array = argValue.substring(1, argValue.length - 1).replace(/ /g,'').split(',');
-                argValue = array;
-            }
-            symbolTable[argName] = [];
-            symbolTable[argName].push({'line':0, 'value': argValue});
-        });
-        let codeToParse = $('#codePlaceholder').val();
-        let functionString = applySymbolicSubstitution(codeToParse, symbolTable);
-        $('#transformedCode').html(functionString);
+        codeSubmissionClicked();
     });
 });
 
-function createTable(codeLines, linesColors){ 
-    let codeString = '';
-    for(let line in codeLines){
-        codeString += createRowString(codeLines[line], line, linesColors);
-    } 
-    $('#transformedCode').html(codeString); 
-
+function codeSubmissionClicked(){
+    let symbolTable = {};
+    $('tr.arg').each(function() {
+        let argName = $(this).find('#name').val();
+        let argValue = $(this).find('#value').val();
+        if(argValue.charAt(0) == '['){
+            let array = argValue.substring(1, argValue.length - 1).replace(/ /g,'').split(',');
+            argValue = array;
+        }
+        symbolTable[argName] = [];
+        symbolTable[argName].push({'line': 0, 'conditions': [], 'value': argValue});
+    });
+    let codeToParse = $('#codePlaceholder').val();
+    let functionString = applySymbolicSubstitution(codeToParse, symbolTable);
+    $('#transformedCode').html(functionString);
 }
 
-function createRowString(lineElements, lineNum, linesColors){
-    let rowString = '<pre';
-    rowString += linesColors[lineNum] ? ' class=' + linesColors[lineNum] + '>' : '>';
-    let line = '';
-    for(let column in lineElements){
-        while(line.length < column)
-            line += ' ';
-        line += lineElements[column];
-    }
-    rowString += line + '</pre>';
-    return rowString;
-}
 
 
 

@@ -1,1 +1,1 @@
-import './code-analyzer.test';
+import './symbolic-substitution.test';

@@ -1,15 +1,15 @@
 import * as esprima from 'esprima';
 
 let codeLines = {};
-let linesColors = {};
 let elseIfConditions = {};
+let currentLine = 0;
 
 const parseCode = (codeToParse) => {
     return esprima.parseScript(codeToParse, {loc: true});
 };
 
 export function applySymbolicSubstitution(codeToParse, symbolTable){
-    codeLines = {}, linesColors = {}, elseIfConditions = {};
+    codeLines = {}, elseIfConditions = {}, currentLine = 0;
     let parsedCode = parseCode(codeToParse);
     let inputVector = new Set([]);
     let functionItem;
@@ -17,10 +17,10 @@ export function applySymbolicSubstitution(codeToParse, symbolTable){
         if(element.type === 'FunctionDeclaration')
             functionItem = element;
         else
-            createItemAccordingToType(element, inputVector, symbolTable, false);
+            createItemAccordingToType(element, inputVector, symbolTable, false, []);
     });
     if(functionItem)
-        createItemAccordingToType(functionItem, inputVector, symbolTable, false);
+        createItemAccordingToType(functionItem, inputVector, symbolTable, false, []);
     return createFunctionString(symbolTable, inputVector);
 }
 
@@ -44,11 +44,12 @@ let typeToHandlerMapping = {
     'ArrayExpression': ArrayExpressionHandler
 };
 
-function createItemAccordingToType(element, inputVector, symbolTable, insideFunction){
-    return typeToHandlerMapping[element.type](element, inputVector, symbolTable, insideFunction);
+function createItemAccordingToType(element, inputVector, symbolTable, insideFunction, conditions){
+    return typeToHandlerMapping[element.type](element, inputVector, symbolTable, insideFunction, conditions);
 }
 
-function functionDeclarationHandler(element,inputVector, symbolTable){
+function functionDeclarationHandler(element,inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.loc.start.line;
     let stringToReturn = 'function ' + element.id.name + '(';
     let index = 1;
     element.params.forEach(variable => {
@@ -56,19 +57,20 @@ function functionDeclarationHandler(element,inputVector, symbolTable){
         inputVector.add(variable.name);
     });
     addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
-    createItemAccordingToType(element.body, inputVector, symbolTable, true);
+    createItemAccordingToType(element.body, inputVector, symbolTable, true, conditions);
 }
 
-function variableDeclarationHandler(element, inputVector, symbolTable, insideFunction){
+function variableDeclarationHandler(element, inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.loc.start.line;
     let declarationIndex = 1, stringToReturn = '';
     element.declarations.forEach(declaration => {
         let value = null;
         if(declaration.init != null)
-            value = createItemAccordingToType(declaration.init, inputVector, symbolTable, insideFunction);
+            value = createItemAccordingToType(declaration.init, inputVector, symbolTable, insideFunction, conditions);
         let name = declaration.id.name;
         if(!(name in symbolTable))
             symbolTable[name] = [];
-        symbolTable[name].push({'line':element.loc.start.line, 'value': value});
+        symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
         if(!insideFunction){
             inputVector.add(name);
             stringToReturn += name + ' = ' + value;
@@ -79,77 +81,87 @@ function variableDeclarationHandler(element, inputVector, symbolTable, insideFun
         addToDictionary(element.loc.start.line, element.loc.start.column, element.kind + ' ' + stringToReturn);
 }
 
-function expressionStatementHandler(element, inputVector, symbolTable, insideFunction){
-    return createItemAccordingToType(element.expression, inputVector, symbolTable, insideFunction);
+function expressionStatementHandler(element, inputVector, symbolTable, insideFunction, conditions){
+    return createItemAccordingToType(element.expression, inputVector, symbolTable, insideFunction, conditions);
 }
 
-function assignmentExpressionHandler(element,inputVector, symbolTable, insideFunction){
+function assignmentExpressionHandler(element,inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.loc.start.line;
     let name = element.left.name;
-    let value = createItemAccordingToType(element.right, inputVector, symbolTable, insideFunction);
+    let value = createItemAccordingToType(element.right, inputVector, symbolTable, insideFunction, conditions);
     if(!(name in symbolTable))
         symbolTable[name] = [];
-    symbolTable[name].push({'line':element.loc.start.line, 'value': value});
+    symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
     if(inputVector.has(name)){
         let stringToReturn = name + ' = ' + value + ';';
         addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
     }
 }
 
-function memberExpressionHandler(element, inputVector, symbolTable, insideFunction){
+function memberExpressionHandler(element, inputVector, symbolTable, insideFunction, conditions){
     let variable = element.object.name;
-    let index = createItemAccordingToType(element.property, inputVector, symbolTable, insideFunction);
+    let index = createItemAccordingToType(element.property, inputVector, symbolTable, insideFunction, conditions);
     if(!inputVector.has(variable)){
-        return getClosestValue(symbolTable[element.name])[index];
+        return getClosestValue(currentLine, symbolTable[element.name], conditions)[index];
     }
     return variable + '[' + index + ']';
 }
 
-function binaryExpressionHandler(element, inputVector, symbolTable, insideFunction){
+function binaryExpressionHandler(element, inputVector, symbolTable, insideFunction, conditions){
     let operator = element.operator;
-    let right = createItemAccordingToType(element.right, inputVector, symbolTable, insideFunction);
-    let left = createItemAccordingToType(element.left, inputVector, symbolTable, insideFunction);
+    let right = createItemAccordingToType(element.right, inputVector, symbolTable, insideFunction, conditions);
+    let left = createItemAccordingToType(element.left, inputVector, symbolTable, insideFunction, conditions);
     return left + ' ' + operator + ' ' + right;
 }
 
-function whileStatementHandler(element, inputVector, symbolTable, insideFunction){
+function whileStatementHandler(element, inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.loc.start.line;
     let stringToReturn = 'while(';
-    let condition = createItemAccordingToType(element.test, inputVector, symbolTable, insideFunction);
+    let condition = createItemAccordingToType(element.test, inputVector, symbolTable, insideFunction, conditions);
     stringToReturn += condition + ')';
+    conditions.push(currentLine);
     addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
-    createItemAccordingToType(element.body, inputVector, symbolTable, insideFunction);
+    createItemAccordingToType(element.body, inputVector, symbolTable, insideFunction, conditions);
+    conditions.pop();
 }
 
-function unaryExpressionHandler(element, inputVector, symbolTable, insideFunction){
+function unaryExpressionHandler(element, inputVector, symbolTable, insideFunction, conditions){
     let operator = element.operator;
-    let argument = createItemAccordingToType(element.argument, inputVector, symbolTable, insideFunction);
+    let argument = createItemAccordingToType(element.argument, inputVector, symbolTable, insideFunction, conditions);
     return operator + argument;
 }
 
-function ifStatementHandler(element, inputVector, symbolTable, insideFunction, type = 'if'){
-    let condition = createItemAccordingToType(element.test, inputVector, symbolTable, insideFunction);
+function ifStatementHandler(element, inputVector, symbolTable, insideFunction, conditions, type = 'if'){
+    currentLine = element.loc.start.line;
+    let condition = createItemAccordingToType(element.test, inputVector, symbolTable, insideFunction, conditions);
     let stringToReturn = type + '(' + condition + ')';
+    conditions.push(currentLine);
     addToIfElseConditions(type, element.loc.start.line);
     if(type === 'if')
         addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
     else
         addToDictionary(element.loc.start.line, element.loc.start.column - 4, stringToReturn);
-    createItemAccordingToType(element.consequent, inputVector, symbolTable, insideFunction);
+    createItemAccordingToType(element.consequent, inputVector, symbolTable, insideFunction, conditions);
+    conditions.pop();
     if(element.alternate != undefined)
-        alternareHandler(element, inputVector, symbolTable, insideFunction, type);
+        alternareHandler(element, inputVector, symbolTable, insideFunction, type, conditions);
     return stringToReturn;
 }
 
-function alternareHandler(element, inputVector, symbolTable, insideFunction, type){
+function alternareHandler(element, inputVector, symbolTable, insideFunction, type, conditions){
     if(element.alternate.type === 'IfStatement')
-        ifStatementHandler(element.alternate, inputVector, symbolTable, insideFunction, 'else if');
+        ifStatementHandler(element.alternate, inputVector, symbolTable, insideFunction, conditions, 'else if');
     else 
-        elseHandler(element, type, inputVector, symbolTable, insideFunction);
+        elseHandler(element, type, inputVector, symbolTable, insideFunction, conditions);
 }
 
-function elseHandler(element, type, inputVector, symbolTable, insideFunction){
+function elseHandler(element, type, inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.consequent.loc.end.line;
+    conditions.push(currentLine);
     addToIfElseConditions(type, element.consequent.loc.end.line);
     addToDictionary(element.consequent.loc.end.line, element.consequent.loc.end.column + 2, 'else');
-    createItemAccordingToType(element.alternate, inputVector, symbolTable, insideFunction,);
+    createItemAccordingToType(element.alternate, inputVector, symbolTable, insideFunction, conditions);
+    conditions.pop();
 }
 
 function addToIfElseConditions(type, line){
@@ -161,37 +173,31 @@ function addToIfElseConditions(type, line){
     }
 }
 
-// function checkLineColor(condition, symbolTable, line){
-//     let conditionValue = replaceValue(condition, symbolTable, line);
-//     if(eval(conditionValue))
-//         linesColors[line] = 'green';
-//     else
-//         linesColors[line] = 'red';
-// }
-
-function returnStatementHandler(element, inputVector, symbolTable, insideFunction){
-    let value = createItemAccordingToType(element.argument, inputVector, symbolTable, insideFunction);
+function returnStatementHandler(element, inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.loc.start.line;
+    let value = createItemAccordingToType(element.argument, inputVector, symbolTable, insideFunction, conditions);
     addToDictionary(element.loc.start.line, element.loc.start.column, 'return ' + value + ';');
 }
 
-function blockStatementHandler(element, inputVector, symbolTable, insideFunction){
+function blockStatementHandler(element, inputVector, symbolTable, insideFunction, conditions){
+    currentLine = element.loc.start.line;
     addToDictionary(element.loc.start.line, element.loc.start.column, '{');
     element.body.forEach(bodyElement => {
-        createItemAccordingToType(bodyElement, inputVector, symbolTable, insideFunction);
+        createItemAccordingToType(bodyElement, inputVector, symbolTable, insideFunction, conditions);
     });
     addToDictionary(element.loc.end.line, element.loc.end.column, '}');
 }
 
-function updateExpressionHandler(element, inputVector, symbolTable, insideFunction){
+function updateExpressionHandler(element, inputVector, symbolTable, insideFunction, conditions){
     let operator = element.operator;
-    let argument = createItemAccordingToType(element.argument, inputVector, symbolTable, insideFunction);
+    let argument = createItemAccordingToType(element.argument, inputVector, symbolTable, insideFunction, conditions);
     return argument + operator;
 }
 
-function identifierHandler(element, inputVector, symbolTable){
+function identifierHandler(element, inputVector, symbolTable, insideFunction, conditions){
     let name = element.name;
     if (!inputVector.has(name)){
-        let value = getClosestValue(symbolTable[element.name]);
+        let value = getClosestValue(currentLine, symbolTable[element.name], conditions);
         if(value.length > 2)
             value = '(' + value + ')';
         return value;
@@ -217,22 +223,19 @@ function addToDictionary(line, column, str){
     codeLines[line][column] = str;
 }
 
-export function getClosestValue(variableValues){
-    let lastValue = variableValues[Object.keys(variableValues)[Object.keys(variableValues).length - 1]]
-    if(Array.isArray(lastValue.value))
-        return '[' + lastValue.value + ']';
-    else
-        return lastValue.value;
-
-    // let closestLine = '';
-    // let minDiffValue = Number.MAX_VALUE;
-    // for(let variable in variableValues){
-    //     if(sourceLine - variableValues[variable].line < minDiffValue){
-    //         closestLine = variableValues[variable].value;
-    //         minDiffValue = Math.abs(sourceLine - variableValues[variable].line);
-    //     }
-    // }
-    // return closestLine;
+export function getClosestValue(sourceLine, variableValues, conditions){
+    let closestLine = '';
+    let minDiffValue = Number.MAX_VALUE;
+    for(let variable in variableValues){
+        if(sourceLine - variableValues[variable].line < minDiffValue && checkIfContainConditions(conditions, variableValues[variable].conditions)){
+            if(Array.isArray(variableValues[variable].value))
+                closestLine = '[' + variableValues[variable].value + ']';
+            else 
+                closestLine = variableValues[variable].value;
+            minDiffValue = Math.abs(sourceLine - variableValues[variable].line);
+        }
+    }
+    return closestLine;
 }
 
 function createFunctionString(symbolTable, inputVector){
@@ -269,7 +272,7 @@ function createLineWithClass(lineValue, lineString){
         return '<pre>' + lineString + '</pre>';
 }
 
-function getCondition(line, inputVector, symbolTable){
+function getCondition(line, inputVector, symbolTable, conditions){
     let i = 0;
     while (i < line.length && line.charAt(i) != 'i' && line.charAt(i) != 'w') {
         i++;
@@ -278,7 +281,7 @@ function getCondition(line, inputVector, symbolTable){
     line += line.endsWith('{') ? '}' : '{}';
     let parsedLine = parseCode(line);
     let condition = parsedLine.body[0].test;
-    return createItemAccordingToType(condition, inputVector, symbolTable, false);
+    return createItemAccordingToType(condition, inputVector, symbolTable, false, conditions);
 
 }
 
@@ -295,77 +298,17 @@ function createRowString(lineElements){
 function getVariableDeclarationString(symbolTable, inputVector){
     let declarationString = '';
     inputVector.forEach(variable => {
-        declarationString += 'let ' + variable + ' = ' + getClosestValue(symbolTable[variable]) + '; ';
-
-    })
-    // for(let variable in inputVector){
-    //     declarationString += 'let' + variable + '=' + getClosestValue(symbolTable[variable]) + '; ';
-    // }
+        declarationString += 'let ' + variable + ' = ' + getClosestValue(0, symbolTable[variable]) + '; ';
+    });
     return declarationString;
 }
-// function replaceValue(condition, symbolTable, line){
-//     let comperators = ['<', '>', '==', '!=', '<=', '>='];
-//     let operators = ['+', '-', '*', '/', '&&', '||', '&', '|'];
-//     let finalExpression;
-//     let i = 0;
-//     let expression = findExpression(condition, skipSpaces(line, i), operators, comperators, symbolTable, line);
-//     let operator = findOperator(condition, skipSpaces(line, expression[1]), comperators);
-//     finalExpression = expression[0] + operator[0];
-//     finalExpression += findExpression(condition, skipSpaces(line, operator[1]), operators, comperators, symbolTable, line)[0];
-//     return finalExpression;    
-// }
 
-// function findVariable(condition, i, operators){
-//     let variable = '';
-//     while(i < condition.length && !operators.includes(condition.charAt(i)) && condition.charAt(i) != ' '){
-//         variable += condition.charAt(i);
-//         i++;
-//     }
-//     return [variable, i];
-// }
-
-// function findOperator(condition, i, operators){
-//     let operator = operators.includes(condition.charAt(i)) ? condition.charAt(i++) : '';
-//     if(i < condition.length && operators.includes(condition.charAt(i)))
-//         operator += condition.charAt[i];
-//     return [operator, i];
-// }
-
-// function findExpression(condition, i, operators, comperators, symbolTable, line){
-//     let expression = '';
-//     while(i < condition.length && !comperators.includes(condition.charAt(i))){
-//         let variable = findVariable(condition, skipSpaces(condition,i), operators);
-//         let operator = findOperator(condition, skipSpaces(condition, variable[1]), operators);
-//         i = skipSpaces(condition, operator[1]);
-//         if(variable[0] in symbolTable)
-//             expression += getClosestValue(line, symbolTable[variable[0]]) + operator[0];
-//         else
-//             expression += variable[0] + operator[0];
-//     }
-    
-//     return [expression, i];
-// }
-
-// function skipSpaces(line, i){
-//     while(i < line.length && line.charAt(i) == ' ')
-//         i++;
-//     return i;
-// }
-
-
-
-// function checkAllConditions(conditions, line){
-//     for(let condition in conditions){
-//         if(elseIfConditions[line].includes(conditions[condition].toString()) || linesColors[conditions[condition]] === 'red' || linesColors[conditions[condition]] === '')
-//             return false;
-//     }
-//     return true;
-// }
-
-// function checkIfContainConditions(source, target){
-//     for(let condition in target){
-//         if(!source.includes(target[condition]))
-//             return false;
-//     }
-//     return true;
-// }
+function checkIfContainConditions(source, target){
+    if(source == undefined)
+        return true;
+    for(let condition in target){
+        if(!source.includes(target[condition]))
+            return false;
+    }
+    return true;
+}
