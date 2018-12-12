@@ -30,10 +30,10 @@ describe('The symbol substitution', () => {
     it('handle arrays variables', () => {
         let symbolTable = {};
         symbolTable['arr'] = [];
-        symbolTable['arr'].push({'line': 0, 'conditions:': [], 'value:': ['1','2','3']});
+        symbolTable['arr'].push({'line': 0, 'conditions:': [], 'value:': [1,2,3]});
         assert.equal(
             applySymbolicSubstitution('function func(arr){\n' + 'let a = 0;\n' + 'if(arr[1]>arr[a])\n' + 'return arr[2]+1;\n}', symbolTable),
-            '<pre>function func(arr){</pre><pre class=green>if(arr[1] > arr[0])</pre><pre>return 0 + 1;</pre><pre> }</pre>'
+            '<pre>function func(arr){</pre><pre class=green>if(arr[1] > arr[0])</pre><pre>return arr[2] + 1;</pre><pre> }</pre>'
         );
     });
     it('handle if else statements', () => {
