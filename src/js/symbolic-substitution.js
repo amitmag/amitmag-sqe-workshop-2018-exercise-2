@@ -11,6 +11,10 @@ const parseCode = (codeToParse) => {
 export function applySymbolicSubstitution(codeToParse, symbolTable){
     codeLines = {}, elseIfConditions = {}, currentLine = 0;
     let parsedCode = parseCode(codeToParse);
+    return replaceLocalVariables(parsedCode, symbolTable)
+}
+
+export function replaceLocalVariables(parsedCode, symbolTable){
     let inputVector = new Set([]);
     let functionItem;
     parsedCode.body.forEach(element => {
@@ -89,8 +93,6 @@ function assignmentExpressionHandler(element,inputVector, symbolTable, insideFun
     currentLine = element.loc.start.line;
     let name = element.left.name;
     let value = createItemAccordingToType(element.right, inputVector, symbolTable, insideFunction, conditions);
-    if(!(name in symbolTable))
-        symbolTable[name] = [];
     symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
     if(inputVector.has(name)){
         let stringToReturn = name + ' = ' + value + ';';
@@ -227,7 +229,7 @@ export function getClosestValue(sourceLine, variableValues, conditions){
     let closestLine = '';
     let minDiffValue = Number.MAX_VALUE;
     for(let variable in variableValues){
-        if(sourceLine - variableValues[variable].line < minDiffValue && checkIfContainConditions(conditions, variableValues[variable].conditions)){
+        if(Math.abs(sourceLine - variableValues[variable].line) < minDiffValue && checkIfContainConditions(conditions, variableValues[variable].conditions)){
             if(Array.isArray(variableValues[variable].value))
                 closestLine = '[' + variableValues[variable].value + ']';
             else 
@@ -238,15 +240,16 @@ export function getClosestValue(sourceLine, variableValues, conditions){
     return closestLine;
 }
 
-function createFunctionString(symbolTable, inputVector){
+export function createFunctionString(symbolTable, inputVector){
     let codeString = ''; // String with color classes
     let functionString = getVariableDeclarationString(symbolTable, inputVector);
     for(let line in codeLines){
         let lineValue;
         let lineString = createRowString(codeLines[line]);
         if(isNeedToPrintTheLine(lineString)){
-            if(lineString.includes('if') || lineString.includes('while')){
+            if(lineString.includes('if')){
                 let condition = getCondition(lineString, inputVector, symbolTable);
+                console.log(functionString + condition);
                 lineValue = eval(functionString + condition);
             }
             else
@@ -260,7 +263,7 @@ function createFunctionString(symbolTable, inputVector){
 function isNeedToPrintTheLine(lineString){
     return !lineString.trim().startsWith('function') && !lineString.trim().startsWith('return') && 
         !lineString.trim().startsWith('let') && !lineString.trim().startsWith('const') &&
-        !lineString.trim().startsWith('var');
+        !lineString.trim().startsWith('var') && !lineString.trim().startsWith('while');
 }
 
 function createLineWithClass(lineValue, lineString){
@@ -274,7 +277,7 @@ function createLineWithClass(lineValue, lineString){
 
 function getCondition(line, inputVector, symbolTable, conditions){
     let i = 0;
-    while (i < line.length && line.charAt(i) != 'i' && line.charAt(i) != 'w') {
+    while (i < line.length && line.charAt(i) != 'i') {
         i++;
     }
     line = line.substring(i);
@@ -304,7 +307,7 @@ function getVariableDeclarationString(symbolTable, inputVector){
 }
 
 function checkIfContainConditions(source, target){
-    if(source == undefined)
+    if(target == undefined)
         return true;
     for(let condition in target){
         if(!source.includes(target[condition]))
