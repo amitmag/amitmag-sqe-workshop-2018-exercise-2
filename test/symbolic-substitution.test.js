@@ -29,11 +29,16 @@ describe('The symbol substitution', () => {
     });
     it('handle arrays variables', () => {
         let symbolTable = {};
-        symbolTable['arr'] = [];
-        symbolTable['arr'].push({'line': 0, 'conditions:': [], 'value:': [1,2,3]});
         assert.equal(
-            applySymbolicSubstitution('function func(arr){\n' + 'let a = 0;\n' + 'if(arr[1]>arr[a])\n' + 'return arr[2]+1;\n}', symbolTable),
-            '<pre>function func(arr){</pre><pre class=green>if(arr[1] > arr[0])</pre><pre>return arr[2] + 1;</pre><pre> }</pre>'
+            applySymbolicSubstitution('let arr=[1, 2, 3]; function func(){\n' + 'let a = 0;\n' + 'if(arr[1]>arr[a])\n' + 'return arr[2]+1;\n}', symbolTable),
+            '<pre>let arr = [1,2,3]; function func( {</pre><pre class=green>if(arr[1] > arr[0])</pre><pre>return arr[2] + 1;</pre><pre> }</pre>'
+        );
+    });
+    it('handle locals arrays variables', () => {
+        let symbolTable = {};
+        assert.equal(
+            applySymbolicSubstitution('function func(){\n' + 'let arr=[1, 2, 3];\n' + 'if(arr[1]>arr[2])\n' + 'return arr[2]+1;\n}', symbolTable),
+            '<pre>function func( {</pre><pre class=red>if(2 > 3)</pre><pre>return 3 + 1;</pre><pre> }</pre>'
         );
     });
     it('handle if else statements', () => {
@@ -51,8 +56,8 @@ describe('The symbol substitution', () => {
     });
     it('handle while statements', () => {
         assert.equal(
-            applySymbolicSubstitution('let x=1;\n' + 'let y=2;\n' + 'function func(){\n' + 'x++;\n' + 'let a = x;\n' + 'y = a + 1;\n' + 'while(a>y)\n' + 'return a+1;}', {}),
-            '<pre>let x = 1;</pre><pre>let y = 2;</pre><pre>function func( {</pre><pre>y = x + 1;</pre><pre>while(x > y)</pre><pre>return x + 1;}</pre>'
+            applySymbolicSubstitution('let x=1, y=2;\n' + 'function func(){\n' + 'x++;\n' + 'let a = x;\n' + 'y = a + 1;\n' + 'while(a>y)\n' + 'return a+1;}', {}),
+            '<pre>let x = 1, y = 2;</pre><pre>function func( {</pre><pre>y = x + 1;</pre><pre>while(x > y)</pre><pre>return x + 1;}</pre>'
         );
     });
     it('handle condition with unary variable', () => {

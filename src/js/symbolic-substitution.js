@@ -11,7 +11,7 @@ const parseCode = (codeToParse) => {
 export function applySymbolicSubstitution(codeToParse, symbolTable){
     codeLines = {}, elseIfConditions = {}, currentLine = 0;
     let parsedCode = parseCode(codeToParse);
-    return replaceLocalVariables(parsedCode, symbolTable)
+    return replaceLocalVariables(parsedCode, symbolTable);
 }
 
 export function replaceLocalVariables(parsedCode, symbolTable){
@@ -25,6 +25,7 @@ export function replaceLocalVariables(parsedCode, symbolTable){
     });
     if(functionItem)
         createItemAccordingToType(functionItem, inputVector, symbolTable, false, []);
+    else {}
     return createFunctionString(symbolTable, inputVector);
 }
 
@@ -77,7 +78,7 @@ function variableDeclarationHandler(element, inputVector, symbolTable, insideFun
         symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
         if(!insideFunction){
             inputVector.add(name);
-            stringToReturn += name + ' = ' + value;
+            stringToReturn += !Array.isArray(value) ? name + ' = ' + value : name + ' = [' + value + ']';
             stringToReturn += declarationIndex++ < element.declarations.length ? ', ' : ';';
         }
     });
@@ -104,7 +105,7 @@ function memberExpressionHandler(element, inputVector, symbolTable, insideFuncti
     let variable = element.object.name;
     let index = createItemAccordingToType(element.property, inputVector, symbolTable, insideFunction, conditions);
     if(!inputVector.has(variable)){
-        return getClosestValue(currentLine, symbolTable[element.name], conditions)[index];
+        return getClosestValue(currentLine, symbolTable[element.object.name], conditions)[index];
     }
     return variable + '[' + index + ']';
 }
@@ -214,7 +215,7 @@ function literalHandler(element){
 function ArrayExpressionHandler(element){
     let elements = [];
     element.elements.forEach(item => {
-        elements.push(item);
+        elements.push(createItemAccordingToType(item));
     });
     return elements;
 }
@@ -230,14 +231,19 @@ export function getClosestValue(sourceLine, variableValues, conditions){
     let minDiffValue = Number.MAX_VALUE;
     for(let variable in variableValues){
         if(Math.abs(sourceLine - variableValues[variable].line) < minDiffValue && checkIfContainConditions(conditions, variableValues[variable].conditions)){
-            if(Array.isArray(variableValues[variable].value))
-                closestLine = '[' + variableValues[variable].value + ']';
-            else 
-                closestLine = variableValues[variable].value;
+            closestLine = variableValues[variable].value;
             minDiffValue = Math.abs(sourceLine - variableValues[variable].line);
         }
     }
     return closestLine;
+}
+
+function getVariableValue(sourceLine, variableValues, conditions){
+    let value = getClosestValue(sourceLine, variableValues, conditions);
+    if(Array.isArray(value))
+        return '[' + value + ']';
+    else
+        return value;
 }
 
 export function createFunctionString(symbolTable, inputVector){
@@ -249,7 +255,6 @@ export function createFunctionString(symbolTable, inputVector){
         if(isNeedToPrintTheLine(lineString)){
             if(lineString.includes('if')){
                 let condition = getCondition(lineString, inputVector, symbolTable);
-                console.log(functionString + condition);
                 lineValue = eval(functionString + condition);
             }
             else
@@ -301,7 +306,7 @@ function createRowString(lineElements){
 function getVariableDeclarationString(symbolTable, inputVector){
     let declarationString = '';
     inputVector.forEach(variable => {
-        declarationString += 'let ' + variable + ' = ' + getClosestValue(0, symbolTable[variable]) + '; ';
+        declarationString += 'let ' + variable + ' = ' + getVariableValue(0, symbolTable[variable]) + '; ';
     });
     return declarationString;
 }
