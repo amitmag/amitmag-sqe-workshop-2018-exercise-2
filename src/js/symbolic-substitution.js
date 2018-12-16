@@ -25,7 +25,6 @@ export function replaceLocalVariables(parsedCode, symbolTable){
     });
     if(functionItem)
         createItemAccordingToType(functionItem, inputVector, symbolTable, false, []);
-    else {}
     return createFunctionString(symbolTable, inputVector);
 }
 
@@ -58,9 +57,10 @@ function functionDeclarationHandler(element,inputVector, symbolTable, insideFunc
     let stringToReturn = 'function ' + element.id.name + '(';
     let index = 1;
     element.params.forEach(variable => {
-        stringToReturn += index++ < element.params.length ? variable.name + ',' : variable.name + ')';
+        stringToReturn += index++ < element.params.length ? variable.name + ',' : variable.name + '';
         inputVector.add(variable.name);
     });
+    stringToReturn +=')';
     addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
     createItemAccordingToType(element.body, inputVector, symbolTable, true, conditions);
 }
@@ -73,17 +73,31 @@ function variableDeclarationHandler(element, inputVector, symbolTable, insideFun
         if(declaration.init != null)
             value = createItemAccordingToType(declaration.init, inputVector, symbolTable, insideFunction, conditions);
         let name = declaration.id.name;
-        if(!(name in symbolTable))
-            symbolTable[name] = [];
+        checkIfIsInSymbolTable(symbolTable, name);
         symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
         if(!insideFunction){
-            inputVector.add(name);
-            stringToReturn += !Array.isArray(value) ? name + ' = ' + value : name + ' = [' + value + ']';
-            stringToReturn += declarationIndex++ < element.declarations.length ? ', ' : ';';
+            stringToReturn += createVariableDeclarationString(inputVector, name, value, declarationIndex, element);
+            declarationIndex++;
         }
     });
     if(!insideFunction)
         addToDictionary(element.loc.start.line, element.loc.start.column, element.kind + ' ' + stringToReturn);
+}
+
+function createVariableDeclarationString(inputVector, name, value, declarationIndex, element){
+    let stringToReturn = ''
+    inputVector.add(name);
+    if(value == null)
+        stringToReturn += name;
+    else
+        stringToReturn += !Array.isArray(value) ? name + ' = ' + value : name + ' = [' + value + ']';
+    stringToReturn += declarationIndex < element.declarations.length ? ', ' : ';';
+    return stringToReturn;
+}
+
+function checkIfIsInSymbolTable(symbolTable, name){
+    if(!(name in symbolTable))
+        symbolTable[name] = [];
 }
 
 function expressionStatementHandler(element, inputVector, symbolTable, insideFunction, conditions){
@@ -212,10 +226,10 @@ function literalHandler(element){
     return element.raw;
 }
 
-function ArrayExpressionHandler(element){
+function ArrayExpressionHandler(element, inputVector, symbolTable, insideFunction, conditions){
     let elements = [];
     element.elements.forEach(item => {
-        elements.push(createItemAccordingToType(item));
+        elements.push(createItemAccordingToType(item, inputVector, symbolTable, insideFunction, conditions));
     });
     return elements;
 }
@@ -271,7 +285,7 @@ function isNeedToPrintTheLine(lineString){
         !lineString.trim().startsWith('var') && !lineString.trim().startsWith('while');
 }
 
-function createLineWithClass(lineValue, lineString){
+export function createLineWithClass(lineValue, lineString){
     if(lineValue == true)
         return '<pre class=green>' + lineString + '</pre>';
     else if(lineValue == false) 
