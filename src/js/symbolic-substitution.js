@@ -23,8 +23,7 @@ export function replaceLocalVariables(parsedCode, symbolTable){
         else
             createItemAccordingToType(element, inputVector, symbolTable, false, []);
     });
-    if(functionItem)
-        createItemAccordingToType(functionItem, inputVector, symbolTable, false, []);
+    createItemAccordingToType(functionItem, inputVector, symbolTable, false, []);
     return createFunctionString(symbolTable, inputVector);
 }
 
@@ -73,7 +72,7 @@ function variableDeclarationHandler(element, inputVector, symbolTable, insideFun
         if(declaration.init != null)
             value = createItemAccordingToType(declaration.init, inputVector, symbolTable, insideFunction, conditions);
         let name = declaration.id.name;
-        checkIfIsInSymbolTable(symbolTable, name);
+        symbolTable[name] = [];
         symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
         if(!insideFunction){
             stringToReturn += createVariableDeclarationString(inputVector, name, value, declarationIndex, element);
@@ -85,7 +84,7 @@ function variableDeclarationHandler(element, inputVector, symbolTable, insideFun
 }
 
 function createVariableDeclarationString(inputVector, name, value, declarationIndex, element){
-    let stringToReturn = ''
+    let stringToReturn = '';
     inputVector.add(name);
     if(value == null)
         stringToReturn += name;
@@ -93,11 +92,6 @@ function createVariableDeclarationString(inputVector, name, value, declarationIn
         stringToReturn += !Array.isArray(value) ? name + ' = ' + value : name + ' = [' + value + ']';
     stringToReturn += declarationIndex < element.declarations.length ? ', ' : ';';
     return stringToReturn;
-}
-
-function checkIfIsInSymbolTable(symbolTable, name){
-    if(!(name in symbolTable))
-        symbolTable[name] = [];
 }
 
 function expressionStatementHandler(element, inputVector, symbolTable, insideFunction, conditions){
@@ -108,9 +102,27 @@ function assignmentExpressionHandler(element,inputVector, symbolTable, insideFun
     currentLine = element.loc.start.line;
     let name = element.left.name;
     let value = createItemAccordingToType(element.right, inputVector, symbolTable, insideFunction, conditions);
-    symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
-    if(inputVector.has(name)){
-        let stringToReturn = name + ' = ' + value + ';';
+    if(element.left.type == 'MemberExpression'){
+        name = createItemAccordingToType(element.left, inputVector, symbolTable, insideFunction, conditions);
+        assignmentInArray(element,inputVector, symbolTable, insideFunction, conditions, value);
+    }
+    else {
+        symbolTable[name].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': value});
+        if(inputVector.has(name)){
+            let stringToReturn = name + ' = ' + value + ';';
+            addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
+        }
+    }
+}
+
+function assignmentInArray(element, inputVector, symbolTable, insideFunction, conditions, value){
+    let arrName = element.left.object.name;
+    let arrValue = getVariableValue(currentLine, symbolTable[arrName], conditions);
+    let index = createItemAccordingToType(element.left.property, inputVector, symbolTable, insideFunction, conditions);
+    let newArrayValue = eval('let ' + arrName + '=' + arrValue + ';' + arrName + '[' + index + ']' + '=' + value + ';' + arrName);
+    symbolTable[arrName].push({'line':element.loc.start.line, 'conditions': [...conditions], 'value': newArrayValue});
+    if(inputVector.has(arrName)){
+        let stringToReturn = arrName + '[' + index + ']' + ' = ' + value + ';';
         addToDictionary(element.loc.start.line, element.loc.start.column, stringToReturn);
     }
 }
@@ -280,9 +292,19 @@ export function createFunctionString(symbolTable, inputVector){
 }
 
 function isNeedToPrintTheLine(lineString){
-    return !lineString.trim().startsWith('function') && !lineString.trim().startsWith('return') && 
-        !lineString.trim().startsWith('let') && !lineString.trim().startsWith('const') &&
-        !lineString.trim().startsWith('var') && !lineString.trim().startsWith('while');
+    return isNotVariableDeclaration(lineString) && isNotWhile(lineString) && isNotStartOrEndOfFunction(lineString);
+}
+
+function isNotVariableDeclaration(lineString){
+    return !lineString.trim().startsWith('let') && !lineString.trim().startsWith('const') && !lineString.trim().startsWith('var');
+}
+
+function isNotWhile(lineString){
+    return !lineString.trim().startsWith('while');
+}
+
+function isNotStartOrEndOfFunction(lineString){
+    return !lineString.trim().startsWith('function') && !lineString.trim().startsWith('return');
 }
 
 export function createLineWithClass(lineValue, lineString){
@@ -320,12 +342,12 @@ function createRowString(lineElements){
 function getVariableDeclarationString(symbolTable, inputVector){
     let declarationString = '';
     inputVector.forEach(variable => {
-        declarationString += 'let ' + variable + ' = ' + getVariableValue(0, symbolTable[variable]) + '; ';
+        declarationString += 'let ' + variable + ' = ' + getVariableValue(currentLine, symbolTable[variable], []) + '; ';
     });
     return declarationString;
 }
 
-function checkIfContainConditions(source, target){
+export function checkIfContainConditions(source, target){
     if(target == undefined)
         return true;
     for(let condition in target){
