@@ -300,7 +300,7 @@ function isNotVariableDeclaration(lineString){
 }
 
 function isNotWhile(lineString){
-    return !lineString.trim().startsWith('while');
+    return !lineString.trim().startsWith('while') && !lineString.trim().startsWith('}');
 }
 
 function isNotStartOrEndOfFunction(lineString){
